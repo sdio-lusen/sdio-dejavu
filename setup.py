@@ -15,7 +15,7 @@ def parse_requirements(requirements):
 
 
 PACKAGE_NAME = "sdio-dejavu"
-PACKAGE_VERSION = "0.1.3-sdio"
+PACKAGE_VERSION = "0.1.3+sdio"
 SUMMARY = "SDIO-Dejavu: Customized audio fingerprinting for CM detection"
 DESCRIPTION = """
 Customized version of Dejavu for TV Commercial (CM) detection.
