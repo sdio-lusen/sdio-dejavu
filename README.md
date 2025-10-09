@@ -8,6 +8,13 @@ Dejavu can memorize audio by listening to it once and fingerprinting it. Then by
 
 Note: for voice recognition, *Dejavu is not the right tool!* Dejavu excels at recognition of exact signals with reasonable amounts of noise.
 
+## Python configuration
+
+sudo apt-get update
+sudo apt-get install -y libpq-dev python3-dev gcc
+pip install git+https://github.com/sdio-lusen/sdio-dejavu.git@master
+
+
 ## Quickstart with Docker
 
 First, install [Docker](https://docs.docker.com/get-docker/).
