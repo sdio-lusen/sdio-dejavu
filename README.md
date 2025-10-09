@@ -8,7 +8,7 @@ Dejavu can memorize audio by listening to it once and fingerprinting it. Then by
 
 Note: for voice recognition, *Dejavu is not the right tool!* Dejavu excels at recognition of exact signals with reasonable amounts of noise.
 
-## Python configuration
+## Build from source 
 
 sudo apt-get update
 
