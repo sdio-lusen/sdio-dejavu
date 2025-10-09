@@ -10,7 +10,7 @@ from scipy.ndimage.morphology import (binary_erosion,
                                       generate_binary_structure,
                                       iterate_structure)
 
-from dejavu.config.settings import (CONNECTIVITY_MASK, DEFAULT_AMP_MIN,
+from sdio_dejavu.config.settings import (CONNECTIVITY_MASK, DEFAULT_AMP_MIN,
                                     DEFAULT_FAN_VALUE, DEFAULT_FS,
                                     DEFAULT_OVERLAP_RATIO, DEFAULT_WINDOW_SIZE,
                                     FINGERPRINT_REDUCTION, MAX_HASH_TIME_DELTA,

@@ -2,7 +2,7 @@ import abc
 import importlib
 from typing import Dict, List, Tuple
 
-from dejavu.config.settings import DATABASES
+from sdio_dejavu.config.settings import DATABASES
 
 
 class BaseDatabase(object, metaclass=abc.ABCMeta):

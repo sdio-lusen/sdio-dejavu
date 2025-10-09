@@ -4,9 +4,9 @@ import sys
 from argparse import RawTextHelpFormatter
 from os.path import isdir
 
-from dejavu import Dejavu
-from dejavu.logic.recognizer.file_recognizer import FileRecognizer
-from dejavu.logic.recognizer.microphone_recognizer import MicrophoneRecognizer
+from sdio_dejavu import Dejavu
+from sdio_dejavu.logic.recognizer.file_recognizer import FileRecognizer
+from sdio_dejavu.logic.recognizer.microphone_recognizer import MicrophoneRecognizer
 
 DEFAULT_CONFIG_FILE = "dejavu.cnf.SAMPLE"
 

@@ -8,7 +8,7 @@ from shutil import rmtree
 import matplotlib.pyplot as plt
 import numpy as np
 
-from dejavu.tests.dejavu_test import (DejavuTest, autolabeldoubles,
+from sdio_dejavu.tests.dejavu_test import (DejavuTest, autolabeldoubles,
                                       generate_test_files, log_msg, set_seed)
 
 

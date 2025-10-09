@@ -1,9 +1,9 @@
 from time import time
 from typing import Dict
 
-import dejavu.logic.decoder as decoder
-from dejavu.base_classes.base_recognizer import BaseRecognizer
-from dejavu.config.settings import (ALIGN_TIME, FINGERPRINT_TIME, QUERY_TIME,
+import sdio_dejavu.logic.decoder as decoder
+from sdio_dejavu.base_classes.base_recognizer import BaseRecognizer
+from sdio_dejavu.config.settings import (ALIGN_TIME, FINGERPRINT_TIME, QUERY_TIME,
                                     RESULTS, TOTAL_TIME)
 
 

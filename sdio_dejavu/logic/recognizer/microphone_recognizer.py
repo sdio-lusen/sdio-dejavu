@@ -1,7 +1,7 @@
 import numpy as np
 import pyaudio
 
-from dejavu.base_classes.base_recognizer import BaseRecognizer
+from sdio_dejavu.base_classes.base_recognizer import BaseRecognizer
 
 
 class MicrophoneRecognizer(BaseRecognizer):

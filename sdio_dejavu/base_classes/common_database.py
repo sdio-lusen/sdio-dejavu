@@ -1,7 +1,7 @@
 import abc
 from typing import Dict, List, Tuple
 
-from dejavu.base_classes.base_database import BaseDatabase
+from sdio_dejavu.base_classes.base_database import BaseDatabase
 
 
 class CommonDatabase(BaseDatabase, metaclass=abc.ABCMeta):
