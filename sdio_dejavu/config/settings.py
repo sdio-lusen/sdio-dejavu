@@ -26,8 +26,8 @@ OFFSET_SECS = 'offset_seconds'
 
 # DATABASE CLASS INSTANCES:
 DATABASES = {
-    'mysql': ("dejavu.database_handler.mysql_database", "MySQLDatabase"),
-    'postgres': ("dejavu.database_handler.postgres_database", "PostgreSQLDatabase")
+    'mysql': ("sdio_dejavu.database_handler.mysql_database", "MySQLDatabase"),
+    'postgres': ("sdio_dejavu.database_handler.postgres_database", "PostgreSQLDatabase")
 }
 
 # TABLE SONGS
