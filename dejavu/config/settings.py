@@ -61,7 +61,7 @@ CONNECTIVITY_MASK = 2
 DEFAULT_FS = 44100
 
 # Size of the FFT window, affects frequency granularity
-DEFAULT_WINDOW_SIZE = 4096
+DEFAULT_WINDOW_SIZE = 2048
 
 # Ratio by which each sequential window overlaps the last and the
 # next window. Higher overlap will allow a higher granularity of offset
@@ -99,4 +99,4 @@ PEAK_SORT = True
 FINGERPRINT_REDUCTION = 20
 
 # Number of results being returned for file recognition
-TOPN = 2
+TOPN = 20
