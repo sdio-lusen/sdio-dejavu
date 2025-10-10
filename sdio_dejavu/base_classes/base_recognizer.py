@@ -4,12 +4,13 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 
+from sdio_dejavu import Dejavu
 from sdio_dejavu.config.settings import DEFAULT_FS
 
 
 class BaseRecognizer(object, metaclass=abc.ABCMeta):
-    def __init__(self, dejavu):
-        self.dejavu = dejavu
+    def __init__(self, dejavu:Dejavu):
+        self.dejavu:Dejavu = dejavu
         self.Fs = DEFAULT_FS
 
     def _recognize(self, *data) -> Tuple[List[Dict[str, any]], int, int, int]:
