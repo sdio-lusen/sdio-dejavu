@@ -72,7 +72,10 @@ def read(file_name: str, limit: int = None) -> Tuple[List[List[int]], int, str]:
         if limit:
             audiofile = audiofile[:limit * 1000]
 
-        data = np.fromstring(audiofile.raw_data, np.int16)
+        try:
+            data = np.frombuffer(audiofile.raw_data, np.int16)
+        except TypeError:
+            data = np.fromstring(audiofile.raw_data, np.int16)
 
         channels = []
         for chn in range(audiofile.channels):
