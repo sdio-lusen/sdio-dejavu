@@ -5,6 +5,8 @@ import traceback
 from itertools import groupby
 from time import time
 from typing import Dict, List, Tuple
+import numpy as np
+from hashlib import sha1
 import logging
 import sdio_dejavu.logic.decoder as decoder
 from sdio_dejavu.base_classes.base_database import get_database
@@ -286,5 +288,51 @@ class Dejavu:
                 print(f"Finished channel {channeln}/{channel_amount} for {file_name}")
 
             fingerprints |= set(hashes)
+
+        return fingerprints, file_hash
+    
+    @staticmethod
+    def get_np_fingerprints(
+        channels: list[np.ndarray],
+        fs: int,
+        file_name: str = "in_memory_audio",
+        limit: int = None,
+        print_output: bool = False
+    ):
+        """
+        Generate fingerprints directly from in-memory NumPy audio data.
+
+        :param channels: list of NumPy arrays, one per audio channel
+        :param fs: sampling rate of the audio data
+        :param file_name: optional name tag for logging or hash generation
+        :param limit: optional limit in seconds (truncate data if set)
+        :param print_output: whether to print progress messages
+        :return: (fingerprints, file_hash)
+        """
+        # Optionally limit audio length
+        if limit:
+            samples_limit = int(limit * fs)
+            channels = [ch[:samples_limit] for ch in channels]
+
+        fingerprints = set()
+        channel_amount = len(channels)
+
+        for channeln, channel in enumerate(channels, start=1):
+            if print_output:
+                print(f"Fingerprinting channel {channeln}/{channel_amount} for {file_name}")
+
+            hashes = fingerprint(channel, Fs=fs)
+
+            if print_output:
+                print(f"Finished channel {channeln}/{channel_amount} for {file_name}")
+
+            fingerprints |= set(hashes)
+
+        # Generate a unique hash for the in-memory audio
+        # based on data content (for deduplication)
+        s = sha1()
+        for ch in channels:
+            s.update(np.ascontiguousarray(ch).tobytes())
+        file_hash = s.hexdigest().upper()
 
         return fingerprints, file_hash
