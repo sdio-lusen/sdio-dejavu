@@ -206,7 +206,7 @@ class Dejavu:
         return matches, dedup_hashes, query_time
 
     def align_matches(self, matches: List[Tuple[int, int]], dedup_hashes: Dict[str, int], queried_hashes: int,
-                      topn: int = TOPN) -> List[Dict[str, any]]:
+                      topn: int = TOPN,confidence_threshold:float = 0.05) -> List[Dict[str, any]]:
         """
         Finds hash matches that align in time with other matches and finds
         consensus about which hashes are "true" signal from the audio.
@@ -227,13 +227,22 @@ class Dejavu:
         )
 
         songs_result = []
-        for song_id, offset, _ in songs_matches[0:topn]:  # consider topn elements in the result
-            song = self.db.get_song_by_id(song_id)
+        #print(f"total {len(songs_matches)} songs matches found")
+        # Preload all songs into a dictionary
+        all_songs = {s[SONG_ID]: s for s in self.db.get_songs()}
 
+        for song_id, offset, _ in songs_matches:  # consider topn elements in the result
+            song = all_songs.get(song_id)
+            if not song:
+                continue
             song_name = song.get(SONG_NAME, None)
             song_hashes = song.get(FIELD_TOTAL_HASHES, None)
             nseconds = round(float(offset) / DEFAULT_FS * DEFAULT_WINDOW_SIZE * DEFAULT_OVERLAP_RATIO, 5)
             hashes_matched = dedup_hashes[song_id]
+            fingerprinted_confidence = round(hashes_matched / song_hashes, 2)
+            
+            if fingerprinted_confidence < confidence_threshold:
+                continue
 
             song = {
                 SONG_ID: song_id,
@@ -244,7 +253,7 @@ class Dejavu:
                 # Percentage regarding hashes matched vs hashes from the input.
                 INPUT_CONFIDENCE: round(hashes_matched / queried_hashes, 2),
                 # Percentage regarding hashes matched vs hashes fingerprinted in the db.
-                FINGERPRINTED_CONFIDENCE: round(hashes_matched / song_hashes, 2),
+                FINGERPRINTED_CONFIDENCE: fingerprinted_confidence,
                 OFFSET: offset,
                 OFFSET_SECS: nseconds,
                 FIELD_FILE_SHA1: song.get(FIELD_FILE_SHA1, None).encode("utf8")
