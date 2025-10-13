@@ -1,6 +1,6 @@
 import abc
 from typing import Dict, List, Tuple
-
+from collections import defaultdict
 from sdio_dejavu.base_classes.base_database import BaseDatabase
 
 
@@ -186,19 +186,16 @@ class CommonDatabase(BaseDatabase, metaclass=abc.ABCMeta):
             - offset_difference: (database_offset - sampled_offset)
         """
         # Create a dictionary of hash => offset pairs for later lookups
-        mapper = {}
+        # Normalize all hashes to uppercase once
+        mapper = defaultdict(list)
         for hsh, offset in hashes:
-            if hsh.upper() in mapper.keys():
-                mapper[hsh.upper()].append(offset)
-            else:
-                mapper[hsh.upper()] = [offset]
+            mapper[hsh.upper()].append(offset)
 
         values = list(mapper.keys())
-
+        dedup_hashes = defaultdict(int)
         # in order to count each hash only once per db offset we use the dic below
-        dedup_hashes = {}
-
         results = []
+        
         with self.cursor() as cur:
             for index in range(0, len(values), batch_size):
                 # Create our IN part of the query
@@ -206,14 +203,16 @@ class CommonDatabase(BaseDatabase, metaclass=abc.ABCMeta):
 
                 cur.execute(query, values[index: index + batch_size])
 
-                for hsh, sid, offset in cur:
-                    if sid not in dedup_hashes.keys():
-                        dedup_hashes[sid] = 1
+                # Iterate over all DB matches
+                for hsh, sid, db_offset in cur:
+                    dedup_hashes[sid] += 1
+                    # vectorized offset diff append (faster than nested loop append)
+                    sample_offsets = mapper[hsh]
+                    diff = db_offset - sample_offsets[0]
+                    if len(sample_offsets) == 1:
+                        results.append((sid, diff))
                     else:
-                        dedup_hashes[sid] += 1
-                    #  we now evaluate all offset for each  hash matched
-                    for song_sampled_offset in mapper[hsh]:
-                        results.append((sid, offset - song_sampled_offset))
+                        results.extend((sid, db_offset - s_off) for s_off in sample_offsets)
 
             return results, dedup_hashes
 
