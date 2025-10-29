@@ -33,7 +33,8 @@ class CommonDatabase(BaseDatabase, metaclass=abc.ABCMeta):
         with self.cursor() as cur:
             cur.execute(self.CREATE_SONGS_TABLE)
             cur.execute(self.CREATE_FINGERPRINTS_TABLE)
-            cur.execute(self.DELETE_UNFINGERPRINTED)
+            # Skip DELETE_UNFINGERPRINTED to avoid deadlocks
+            #cur.execute(self.DELETE_UNFINGERPRINTED)
 
     def empty(self) -> None:
         """
