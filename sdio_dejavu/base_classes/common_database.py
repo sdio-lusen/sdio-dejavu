@@ -35,6 +35,7 @@ class CommonDatabase(BaseDatabase, metaclass=abc.ABCMeta):
             cur.execute(self.CREATE_FINGERPRINTS_TABLE)
             # Skip DELETE_UNFINGERPRINTED to avoid deadlocks
             #cur.execute(self.DELETE_UNFINGERPRINTED)
+        self.ensure_daily_partition()
 
     def empty(self) -> None:
         """
@@ -132,6 +133,12 @@ class CommonDatabase(BaseDatabase, metaclass=abc.ABCMeta):
         """
         pass
 
+    @abc.abstractmethod
+    def ensure_daily_partition(self) -> None:
+        """Ensures that a daily partition exists for the current date."""
+        pass
+
+
     def query(self, fingerprint: str = None) -> List[Tuple]:
         """
         Returns all matching fingerprint entries associated with
@@ -165,6 +172,7 @@ class CommonDatabase(BaseDatabase, metaclass=abc.ABCMeta):
             - offset: Offset this hash was created from/at.
         :param batch_size: insert batches.
         """
+        self.ensure_daily_partition()
         values = [(song_id, hsh, int(offset)) for hsh, offset in hashes]
 
         with self.cursor() as cur:

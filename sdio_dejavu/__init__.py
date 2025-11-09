@@ -3,11 +3,13 @@ import os
 import sys
 import traceback
 from itertools import groupby
-from time import time
+import time
 from typing import Dict, List, Tuple
 import numpy as np
 from hashlib import sha1
 import logging
+import concurrent
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import sdio_dejavu.logic.decoder as decoder
 from sdio_dejavu.base_classes.base_database import get_database
 from sdio_dejavu.config.settings import (DEFAULT_FS, DEFAULT_OVERLAP_RATIO,
@@ -66,34 +68,59 @@ class Dejavu:
         """
         self.db.delete_songs_by_id(song_ids)
     
-    def fingerprint_media_list(self, media_list: list[str], nprocesses: int = None):
-        """
-        Fingerprints all media files in the provided list in parallel.
-        """
-        nprocesses = nprocesses or max(1, multiprocessing.cpu_count() - 1)
+    def fingerprint_media_list(
+        self, 
+        media_list: list[str], 
+        nprocesses: int | None = None
+        ):
+        nprocesses = nprocesses or max(1, min(4, os.cpu_count() or 2))
         failed_files = []
 
-        with multiprocessing.Pool(nprocesses) as pool:
-            worker_input = [
-                (filename, self.limit)
-                for filename in media_list
-                if decoder.unique_hash(filename) not in self.songhashes_set
-            ]
+        # Build work items early to avoid surprises from generator laziness
+        worker_input = [
+            (filename, self.limit)
+            for filename in media_list
+            if decoder.unique_hash(filename) not in self.songhashes_set
+        ]
+        logging.info(f"[FP] submitting {len(worker_input)} files with {nprocesses} processes")
 
-            for args in pool.imap_unordered(Dejavu._fingerprint_worker, worker_input):
+        start_time = time.perf_counter()
+        submitted = {}
+        completed = 0
+
+        # Small chunks keep latency predictable
+        timeout_s = 120  # per-file guard; tune to your media
+        with ProcessPoolExecutor(max_workers=nprocesses, mp_context=multiprocessing.get_context("spawn")) as ex:
+            futures = []
+            for item in worker_input:
+                fn = item[0]
+                fut = ex.submit(Dejavu._fingerprint_worker, item)
+                submitted[fut] = fn
+                futures.append(fut)
+                logging.debug(f"[FP] submitted: {fn}")
+
+            for fut in as_completed(futures, timeout=None):
+                fn = submitted[fut]
                 try:
-                    song_name, hashes, file_hash = args
-                    with self.db.cursor():
+                    song_name, hashes, file_hash = fut.result(timeout=timeout_s)
+                    # DB writes in parent only (good). Wrap in retry + timeout.
+                    with self.db.cursor() as cur:
                         sid = self.db.insert_song(song_name, file_hash, len(hashes))
                         self.db.insert_hashes(sid, hashes)
                         self.db.set_song_fingerprinted(sid)
+                    completed += 1
+                    if completed % 50 == 0:
+                        logging.info(f"[FP] progress: {completed}/{len(futures)} (elapsed {time.perf_counter()-start_time:.1f}s)")
+                except concurrent.futures.TimeoutError:
+                    logging.error(f"[FP] timeout: {fn}")
+                    failed_files.append(fn)
                 except Exception as e:
-                    logging.error(f"Failed fingerprinting {song_name}: {e}")
-                    failed_files.append(song_name)
+                    logging.exception(f"[FP] failed: {fn} | {e}")
+                    failed_files.append(fn)
 
-        self.__load_fingerprinted_audio_hashes()
-        if failed_files:
-            logging.warning(f"Failed to fingerprint {len(failed_files)} files: {failed_files}")
+        logging.info(f"[FP] done. ok={completed} fail={len(failed_files)} elapsed={time.perf_counter()-start_time:.1f}s")
+        return failed_files
+
 
 
     def fingerprint_directory(self, path: str, extensions: str, nprocesses: int = None) -> None:

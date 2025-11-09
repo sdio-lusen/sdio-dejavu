@@ -2,7 +2,7 @@ import queue
 
 import psycopg2
 from psycopg2.extras import DictCursor
-
+from datetime import datetime, timedelta
 from sdio_dejavu.base_classes.common_database import CommonDatabase
 from sdio_dejavu.config.settings import (FIELD_FILE_SHA1, FIELD_FINGERPRINTED,
                                     FIELD_HASH, FIELD_OFFSET, FIELD_SONG_ID,
@@ -29,20 +29,22 @@ class PostgreSQLDatabase(CommonDatabase):
     """
 
     CREATE_FINGERPRINTS_TABLE = f"""
-        CREATE TABLE IF NOT EXISTS "{FINGERPRINTS_TABLENAME}" (
-            "{FIELD_HASH}" BYTEA NOT NULL
-        ,   "{FIELD_SONG_ID}" INT NOT NULL
-        ,   "{FIELD_OFFSET}" INT NOT NULL
-        ,   "date_created" TIMESTAMP NOT NULL DEFAULT now()
-        ,   "date_modified" TIMESTAMP NOT NULL DEFAULT now()
-        ,   CONSTRAINT "uq_{FINGERPRINTS_TABLENAME}" UNIQUE  ("{FIELD_SONG_ID}", "{FIELD_OFFSET}", "{FIELD_HASH}")
-        ,   CONSTRAINT "fk_{FINGERPRINTS_TABLENAME}_{FIELD_SONG_ID}" FOREIGN KEY ("{FIELD_SONG_ID}")
-                REFERENCES "{SONGS_TABLENAME}"("{FIELD_SONG_ID}") ON DELETE CASCADE
-        );
+    CREATE TABLE IF NOT EXISTS "{FINGERPRINTS_TABLENAME}" (
+        "{FIELD_HASH}" BYTEA NOT NULL,
+        "{FIELD_SONG_ID}" INT NOT NULL,
+        "{FIELD_OFFSET}" INT NOT NULL,
+        "date_created" TIMESTAMP NOT NULL DEFAULT now(),
+        "date_modified" TIMESTAMP NOT NULL DEFAULT now(),
+        CONSTRAINT "uq_{FINGERPRINTS_TABLENAME}" UNIQUE ("{FIELD_SONG_ID}", "{FIELD_OFFSET}", "{FIELD_HASH}", "date_created"),
+        CONSTRAINT "fk_{FINGERPRINTS_TABLENAME}_{FIELD_SONG_ID}" FOREIGN KEY ("{FIELD_SONG_ID}")
+        REFERENCES "{SONGS_TABLENAME}"("{FIELD_SONG_ID}") ON DELETE CASCADE
+    )
+    PARTITION BY RANGE ("date_created");
 
-        CREATE INDEX IF NOT EXISTS "ix_{FINGERPRINTS_TABLENAME}_{FIELD_HASH}" ON "{FINGERPRINTS_TABLENAME}"
-        USING hash ("{FIELD_HASH}");
+    CREATE INDEX IF NOT EXISTS "ix_{FINGERPRINTS_TABLENAME}_{FIELD_HASH}"
+    ON "{FINGERPRINTS_TABLENAME}" USING hash ("{FIELD_HASH}");
     """
+
 
     CREATE_FINGERPRINTS_TABLE_INDEX = f"""
         CREATE INDEX "ix_{FINGERPRINTS_TABLENAME}_{FIELD_HASH}" ON "{FINGERPRINTS_TABLENAME}"
@@ -135,7 +137,39 @@ class PostgreSQLDatabase(CommonDatabase):
         super().__init__()
         self.cursor = cursor_factory(**options)
         self._options = options
+    
+    def ensure_daily_partition(self) -> None:
+        today = datetime.now().date()
+        tomorrow = today + timedelta(days=1)
+        part_name = f'{FINGERPRINTS_TABLENAME}_{today.year}_{today.month:02d}_{today.day:02d}'
+        start = f"{today} 00:00:00+09"
+        end = f"{tomorrow} 00:00:00+09"
 
+        with self.cursor() as cur:
+            # 20251107: Advisory lock for daily partition creation (fingerprints)
+            try:
+                cur.execute("SELECT pg_advisory_lock(20251107);")
+
+
+                cur.execute(f"""
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (
+                            SELECT 1 FROM pg_tables WHERE tablename = '{part_name}'
+                        ) THEN
+                            EXECUTE format('
+                                CREATE TABLE IF NOT EXISTS {part_name}
+                                PARTITION OF {FINGERPRINTS_TABLENAME}
+                                FOR VALUES FROM (%L) TO (%L);
+                            ', '{start}', '{end}');
+                        END IF;
+                    END $$;
+                """)
+            finally:
+                # Release the lock
+                cur.execute("SELECT pg_advisory_unlock(20251107);")
+
+        
     def after_fork(self) -> None:
         # Clear the cursor cache, we don't want any stale connections from
         # the previous process.
