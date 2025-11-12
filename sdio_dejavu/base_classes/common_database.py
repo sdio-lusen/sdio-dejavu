@@ -2,7 +2,7 @@ import abc
 from typing import Dict, List, Tuple
 from collections import defaultdict
 from sdio_dejavu.base_classes.base_database import BaseDatabase
-
+from loguru import logger
 
 class CommonDatabase(BaseDatabase, metaclass=abc.ABCMeta):
     # Since several methods across different databases are actually just the same
@@ -26,7 +26,7 @@ class CommonDatabase(BaseDatabase, metaclass=abc.ABCMeta):
         """
         pass
 
-    def setup(self) -> None:
+    def setup_old(self) -> None:
         """
         Called on creation or shortly afterwards.
         """
@@ -36,7 +36,23 @@ class CommonDatabase(BaseDatabase, metaclass=abc.ABCMeta):
             # Skip DELETE_UNFINGERPRINTED to avoid deadlocks
             #cur.execute(self.DELETE_UNFINGERPRINTED)
         self.ensure_daily_partition()
-
+    
+    def setup(self) -> None:
+        """Safely create tables if missing."""
+        with self.cursor() as cur:
+            cur.execute("""
+                SELECT to_regclass('public.songs'),
+                    to_regclass('public.fingerprints');
+            """)
+            songs, fps = cur.fetchone()
+            if songs and fps:
+                logger.info("Fingerprint tables already exist — skipping DDL.")
+                return
+            logger.info("Creating fingerprint tables...")
+            cur.execute(self.CREATE_SONGS_TABLE)
+            cur.execute(self.CREATE_FINGERPRINTS_TABLE)
+        self.ensure_daily_partition()
+    
     def empty(self) -> None:
         """
         Called when the database should be cleared of all data.
