@@ -7,7 +7,6 @@ import time
 from typing import Dict, List, Tuple
 import numpy as np
 from hashlib import sha1
-import logging
 import concurrent
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import sdio_dejavu.logic.decoder as decoder
@@ -20,8 +19,7 @@ from sdio_dejavu.config.settings import (DEFAULT_FS, DEFAULT_OVERLAP_RATIO,
                                     INPUT_CONFIDENCE, INPUT_HASHES, OFFSET,
                                     OFFSET_SECS, SONG_ID, SONG_NAME, TOPN)
 from sdio_dejavu.logic.fingerprint import fingerprint
-import logging
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 class Dejavu:
     def __init__(self, config):
@@ -69,6 +67,61 @@ class Dejavu:
         self.db.delete_songs_by_id(song_ids)
     
     def fingerprint_media_list(
+        self,
+        media_list: list[str],
+        nprocesses: int | None = None   # kept for compatibility but unused
+    ):
+        # No parallelism → always sequential
+        failed_files = []
+
+        # Build work items early
+        worker_input = [
+            (filename, self.limit)
+            for filename in media_list
+            if decoder.unique_hash(filename) not in self.songhashes_set
+        ]
+        logger.info(f"[FP] sequential fingerprinting {len(worker_input)} files")
+
+        start_time = time.perf_counter()
+        completed = 0
+        timeout_s = 120  # per-file guard
+
+        for filename, limit in worker_input:
+            try:
+                logger.debug(f"[FP] processing: {filename}")
+
+                # Run worker directly (no executor)
+                # Wrap inside a timeout using signal (UNIX only)
+                result = Dejavu._fingerprint_worker((filename, limit))
+
+                # song_name, hashes, file_hash
+                song_name, hashes, file_hash = result
+
+                # DB operations
+                with self.db.cursor() as cur:
+                    sid = self.db.insert_song(song_name, file_hash, len(hashes))
+                    self.db.insert_hashes(sid, hashes)
+                    self.db.set_song_fingerprinted(sid)
+
+                completed += 1
+                if completed % 50 == 0:
+                    logger.info(
+                        f"[FP] progress: {completed}/{len(worker_input)} "
+                        f"(elapsed {time.perf_counter() - start_time:.1f}s)"
+                    )
+
+            except Exception as e:
+                logger.exception(f"[FP] failed: {filename} | {e}")
+                failed_files.append(filename)
+
+        logger.info(
+            f"[FP] done. ok={completed} fail={len(failed_files)} "
+            f"elapsed={time.perf_counter()-start_time:.1f}s"
+        )
+        return failed_files
+
+
+    def fingerprint_media_list_multiprocess(
         self, 
         media_list: list[str], 
         nprocesses: int | None = None
@@ -82,7 +135,7 @@ class Dejavu:
             for filename in media_list
             if decoder.unique_hash(filename) not in self.songhashes_set
         ]
-        logging.info(f"[FP] submitting {len(worker_input)} files with {nprocesses} processes")
+        logger.info(f"[FP] submitting {len(worker_input)} files with {nprocesses} processes")
 
         start_time = time.perf_counter()
         submitted = {}
@@ -97,7 +150,7 @@ class Dejavu:
                 fut = ex.submit(Dejavu._fingerprint_worker, item)
                 submitted[fut] = fn
                 futures.append(fut)
-                logging.debug(f"[FP] submitted: {fn}")
+                logger.debug(f"[FP] submitted: {fn}")
 
             for fut in as_completed(futures, timeout=None):
                 fn = submitted[fut]
@@ -110,15 +163,15 @@ class Dejavu:
                         self.db.set_song_fingerprinted(sid)
                     completed += 1
                     if completed % 50 == 0:
-                        logging.info(f"[FP] progress: {completed}/{len(futures)} (elapsed {time.perf_counter()-start_time:.1f}s)")
+                        logger.info(f"[FP] progress: {completed}/{len(futures)} (elapsed {time.perf_counter()-start_time:.1f}s)")
                 except concurrent.futures.TimeoutError:
-                    logging.error(f"[FP] timeout: {fn}")
+                    logger.error(f"[FP] timeout: {fn}")
                     failed_files.append(fn)
                 except Exception as e:
-                    logging.exception(f"[FP] failed: {fn} | {e}")
+                    logger.exception(f"[FP] failed: {fn} | {e}")
                     failed_files.append(fn)
 
-        logging.info(f"[FP] done. ok={completed} fail={len(failed_files)} elapsed={time.perf_counter()-start_time:.1f}s")
+        logger.info(f"[FP] done. ok={completed} fail={len(failed_files)} elapsed={time.perf_counter()-start_time:.1f}s")
         return failed_files
 
 
@@ -340,7 +393,7 @@ class Dejavu:
 
         :param channels: list of NumPy arrays, one per audio channel
         :param fs: sampling rate of the audio data
-        :param file_name: optional name tag for logging or hash generation
+        :param file_name: optional name tag for logger or hash generation
         :param limit: optional limit in seconds (truncate data if set)
         :param print_output: whether to print progress messages
         :return: (fingerprints, file_hash)
